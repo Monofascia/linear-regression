@@ -1,0 +1,215 @@
+---
+title: "Analisi di regressione sul dataset Film"
+author: "E.Chiola & P.Iezzi"
+date: "24/5/2020"
+output:
+  html_document: 
+    df_print: paged
+---
+# Overview dei dati
+
+Viene mostrata la struttura del dataset, composto da 4086 osservazioni su 6 variabili esplicative. L'obiettivo di questa analisi è quella di prevedere l'incasso al botteghino (revenue) considerando le variabili a disposizione.
+
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+library(readr)
+library(knitr)
+movies_metadata <- read_delim("C:/Users/Patrizio/Desktop/TUTTO/Ud'A/CLEBA/DATA SCIENCE/Primo progetto-Data Science/movies_metadata.csv", 
+    ";", escape_double = FALSE, trim_ws = TRUE)
+
+```
+
+```{r}
+options(scipen=10)
+kable(head(movies_metadata)[1:5,])
+```
+
+
+
+```{r}
+
+
+train1<-read_delim("C:/Users/Patrizio/Desktop/TUTTO/Ud'A/CLEBA/DATA SCIENCE/Primo progetto-Data Science/movies_metadata.csv",";", escape_double = FALSE, col_types = cols(title = col_skip()), trim_ws = TRUE)
+str(train1)
+attach(train1)
+```
+
+
+Si procede scalando le variabili esplicative in base milionaria, in modo tale da avere una scala unica.
+```{r} 
+#scaliamo a base milionaria
+train1[,1]<-train1$budget/1000000
+train1[,2]<-train1$popularity/1000000
+train1[,3]<-train1$revenue/1000000
+View(train1)
+```
+
+Una volta scalate le variabili si mostra il summary del dataset, effettuando un correlazione tra tutte le variabili quantitative. La variabile original_language sarà analizzata successivamente tramite Dummy.
+```{r}
+#summary 
+summary(train1)
+```
+
+```{r}  
+#correlazione
+kable(t(cor(train1[,c(1:5)])))
+```
+
+Una volta effettuata la correlazione tra le variabili, si procede alla rappresentazione grafica delle stesse.
+```{r}
+# plot numeriche
+plot(train1[c(1,2,3,4,5)])
+```
+
+# Analisi di regressione lineare semplice
+
+Si procede con l'analisi di regressione lineare semplice, ponendo come variabilie dipendente <b>Revenue</b> e come variabili esplicative tutte le altre.
+```{r}
+# Budget
+OLS<-lm(revenue~budget)
+summary(OLS)
+
+```
+
+```{r}
+# Popularity
+OLS1<-lm(revenue~popularity)
+summary(OLS1)
+```
+
+```{r}
+# Runtime
+OLS2<-lm(revenue~runtime)
+summary(OLS2)
+```
+
+```{r}
+# Voto medio
+OLS3<-lm(revenue~vote_average)
+summary(OLS3)
+
+```
+
+### Dummy
+
+```{r}
+#dummy
+OLS_Dummy<-lm(revenue~original_language)
+summary(OLS_Dummy)
+```
+
+E' stata interpretata la variabile original_language separatamente introducendo una variabile Dummy. Bisogna porre attenzione all'interpretazione dell'output che, in questo caso, è: 
+<br>- B0: il revenue medio dei film in inglese
+<br>- B1: la differenza tra il revenue medio dei film in italiano ed il revenue medio dei film in inglese
+<br>- B2: la differenza tra il revenue medio dei film in spagnolo ed il revenue medio dei film in ignlese
+
+
+
+
+
+# Regressione lineare multipla
+
+Si inizia la regressione lineare multipla con il metodo <b>Backward</b>. Questo metodo consiste nell'inserire nel modello tutte le variabili a disposizione per poi eliminarle gradualmente sino ad ottenere il modello con tutte le variabili significative.
+```{r}
+#Multiplo con tutto
+OLS_Multiple<-lm(revenue~., data = train1)
+summary(OLS_Multiple)
+```
+
+L'R2 spiega circa il 60% della varianza totale e la F statistica risulta significativa. In base a questi due elementi sembra che le esplicative, nel complesso, spieghino bene la dipendente. Tuttavia alcune variabili risultano poco significative e saranno eliminate in seguito. 
+
+```{r}
+confint(OLS_Multiple)
+```
+
+
+```{r paged.print=FALSE}
+
+anova(OLS, OLS_Multiple) #Test F parziale
+
+```
+<font color="red">Ci teniamo a precisare che l'output precedente è errato, poichè abbiamo riscontrato problemi nella trasposizione dei dati su RMarkdown</font>
+
+L'analisi di regressione lineare multipla procede con l'eliminazione della variabile meno significativa, in questo caso original_language.
+
+```{r}
+#multiplo senza non significativi
+OLS_Multiple2<-lm(revenue~. -original_language, data = train1)
+summary(OLS_Multiple2)
+confint(OLS_Multiple2)
+```
+
+
+```{r}
+#mostriamo
+par(mfrow=c(2,2))
+plot(OLS_Multiple2)
+```
+<br>- Nel primo grafico si osserva una variabilità degli errori non costante.
+<br>- Il Q-Q Plot mostra una dubbia normalità degli errori.
+<br>- Nel terzo grafico si osserva che la distribuzione dei residui non è costante e si individuano alcuni valori anomali.
+<br>- Nel grafico che mostra i residui standardizzati rispetto ai punti di leva si evidenziano 3 outliers di cui 2 ad alta leva.
+
+### Raffinamento del modello
+
+Una volta identificati gli outliers, si procede alla loro eliminazione.
+
+```{r}
+#eliminiamo gli outliers
+no_outliers<-lm(data = train1[c(-1949,-293,-278,-635),], revenue~. -original_language)
+summary(no_outliers)
+confint(no_outliers)
+```
+
+Si noti come il grado di significatività delle variabili aumenti.
+<br>Segue il confronto AIC dei vari modelli per vedere quali hanno una bontà di adattamento migliore. In questo caso si osserva come l'AIC più basso è quello dell'OLS multiplo senza outliers.
+
+
+```{r}
+AIC(OLS_Multiple) #con tutte le variabili
+AIC(OLS_Multiple2) #senza original_language
+AIC(no_outliers) #senza outliers
+
+```
+
+```{r} 
+#mostriamo il plot della regressione definitiva
+par(mfrow=c(2,2))
+plot(no_outliers)
+```
+
+
+
+```{r message=FALSE, warning=FALSE}
+#jarque bera test
+library(tseries)
+jarque.bera.test(residuals(no_outliers))
+```
+
+Con questo test si afferma che gli errori non si distribuiscono in maniera normale, dato il basso p-value si rifiuta l'ipotesi H0 (normalità degli errori) a favore dell'ipotesi H1 (non normalità degli errori).
+
+
+```{r message=FALSE, warning=FALSE}
+#breush pagan
+library(lmtest)
+bptest(no_outliers, studentize = FALSE)
+
+```
+
+Con il Breusch-Pagan si afferma che gli errori sono eteroschedastici, rifiutando l'ipotesi H0 di omoschedasticità.
+
+```{r}
+#durbin watson
+dwtest(no_outliers, alternative = c("two.sided"))
+
+```
+Il test è significativo, quindi non si può escludere l'autocorrelazione dei residui.
+
+```{r}
+#previsione su film Spider-Man: Far from home (2019)
+spiderman=data.frame(budget=160000000, runtime=123, popularity=250000000, vote_average=7.5, original_language="en")
+predict(no_outliers, spiderman , level = 0.95, interval = "prediction")
+```
+
+E' stato preso in esame il film "Spider-Man: Far from home" uscito nel 2019, ed è stata effettuata una previsione degli incassi.
+
